@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>WebRTC with Socket.IO</title>
+  </head>
+  <body>
+    <!-- Local video element, displays user's camera stream -->
+    <video id="localVideo" autoplay muted></video>
+
+    <!-- Remote video element, displays video from the remote peer -->
+    <video id="remoteVideo" autoplay></video>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      // Connect to the server using Socket.IO
+      const socket = io();
+
+      // Get references to the local and remote video elements
+      const localVideo = document.getElementById("localVideo");
+      const remoteVideo = document.getElementById("remoteVideo");
+
+      // Configuration for ICE (Interactive Connectivity Establishment) servers
+      const configuration = {
+        iceServers: [
+          {
+            urls: [
+              "stun:stun1.l.google.com:19302",
+              "stun:stun2.l.google.com:19302",
+            ],
+          },
+        ],
+        iceCandidatePoolSize: 10,
+      };
+
+      // Create a new RTCPeerConnection with the specified configuration
+      const pc = new RTCPeerConnection(configuration);
+
+      // Get user media (camera and microphone) and add tracks to the RTCPeerConnection
+      navigator.mediaDevices
+        .getUserMedia({ video: true, audio: true })
+        .then((stream) => {
+          // Display the local video stream in the localVideo element
+          localVideo.srcObject = stream;
+          stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+          // When negotiation is needed, create an offer and set it as the local description
+          pc.onnegotiationneeded = () => {
+            pc.createOffer()
+              .then((offer) => pc.setLocalDescription(offer))
+              .then(() => socket.emit("offer", pc.localDescription));
+          };
+        });
+
+      // When an ICE candidate is found, send it to the remote peer via the server
+      pc.onicecandidate = ({ candidate }) => {
+        if (candidate) {
+          socket.emit("candidate", candidate);
+        }
+      };
+
+      // When a media track is received from the remote peer, display it in the remoteVideo element
+      pc.ontrack = ({ streams: [stream] }) => {
+        remoteVideo.srcObject = stream;
+      };
+
+      // When an "offer" signal is received from the server, set the remote description and create an answer
+      socket.on("offer", (description) => {
+        pc.setRemoteDescription(description)
+          .then(() => pc.createAnswer())
+          .then((answer) => pc.setLocalDescription(answer))
+          .then(() => socket.emit("answer", pc.localDescription));
+      });
+
+      // When an "answer" signal is received from the server, set the remote description
+      socket.on("answer", (description) => {
+        pc.setRemoteDescription(description);
+      });
+
+      // When a new ICE candidate is received from the server, add it to the RTCPeerConnection
+      socket.on("candidate", (candidate) => {
+        pc.addIceCandidate(new RTCIceCandidate(candidate));
+      });
+    </script>
+  </body>
+</html>

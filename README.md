@@ -15,6 +15,8 @@ Before running the application, make sure you have the following installed:
 
 ```
 
+git clone https://github.com/emmayusufu/webrtc-demo.git
+
 cd webrtc-demo
 ```
 
